@@ -1,0 +1,201 @@
+/*
+ * Gemini API Helper for InDesign
+ * Handles API communication with Google Gemini
+ */
+
+// Load API key from config file
+function loadAPIKey() {
+    try {
+        // Try multiple possible config locations
+        var configPaths = [
+            Folder.userData.fsName + "/InDesignTranslator/config.json",
+            Folder.startup.fsName + "/config.json",
+            File($.fileName).parent.fsName + "/config.json"
+        ];
+        
+        for (var i = 0; i < configPaths.length; i++) {
+            var configFile = File(configPaths[i]);
+            
+            if (configFile.exists) {
+                configFile.encoding = "UTF-8";
+                configFile.open("r");
+                var configContent = configFile.read();
+                configFile.close();
+                
+                // Simple JSON parsing (ExtendScript doesn't have JSON.parse in older versions)
+                try {
+                    var configData = JSON.parse(configContent);
+                    if (configData.apiKey) {
+                        return configData.apiKey;
+                    }
+                } catch (e) {
+                    // Fallback to regex parsing
+                    var apiKeyMatch = configContent.match(/"apiKey"\s*:\s*"([^"]+)"/);
+                    if (apiKeyMatch && apiKeyMatch.length > 1) {
+                        return apiKeyMatch[1];
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Continue to prompt
+    }
+    
+    // Try to get from environment variable or prompt user
+    var apiKey = prompt("Please enter your Gemini API key:", "");
+    if (!apiKey || apiKey.trim() === "") {
+        throw new Error("API key is required. Please set it in the config.json file or enter it when prompted.");
+    }
+    
+    return apiKey.trim();
+}
+
+// Call Gemini API for translation
+function callGeminiAPI(text) {
+    // ExtendScript doesn't have native HTTP support, so we use system commands
+    return callGeminiAPIWithCurl(text);
+}
+
+// Alternative method using system command (for Windows/Mac)
+function callGeminiAPIWithCurl(text) {
+    try {
+        var apiKey = loadAPIKey();
+        
+        if (!apiKey) {
+            throw new Error("API key not found");
+        }
+        
+        // Escape text for JSON - handle special characters
+        var escapedText = text.replace(/\\/g, "\\\\")
+                              .replace(/"/g, '\\"')
+                              .replace(/\n/g, "\\n")
+                              .replace(/\r/g, "\\r")
+                              .replace(/\t/g, "\\t");
+        
+        var promptText = "Translate the following Arabic text to English. Only return the translation, no explanations:\n\n" + text;
+        
+        // Build JSON payload properly
+        var jsonPayload = {
+            contents: [{
+                parts: [{
+                    text: promptText
+                }]
+            }]
+        };
+        
+        // Convert to JSON string manually for better control
+        var jsonString = '{"contents":[{"parts":[{"text":' + JSON.stringify(promptText) + '}]}]}';
+        
+        // Create temporary file for JSON payload
+        var timestamp = Math.floor(Math.random() * 1000000);
+        var tempFile = File(Folder.temp.fsName + "/indesign_translate_" + timestamp + ".json");
+        tempFile.encoding = "UTF-8";
+        tempFile.open("w");
+        tempFile.write(jsonString);
+        tempFile.close();
+        
+        // Create response file path
+        var responseFile = File(Folder.temp.fsName + "/indesign_response_" + timestamp + ".json");
+        
+        // Create curl command
+        var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + apiKey;
+        
+        if ($.os.indexOf("Windows") !== -1) {
+            // Windows - use PowerShell for better JSON handling
+            var psScript = File(Folder.temp.fsName + "/run_translate_" + timestamp + ".ps1");
+            psScript.open("w");
+            psScript.write('$json = Get-Content "' + tempFile.fsName.replace(/\\/g, '/') + '" -Raw\n');
+            psScript.write('$response = Invoke-RestMethod -Uri "' + apiUrl + '" -Method Post -Body $json -ContentType "application/json; charset=utf-8"\n');
+            psScript.write('$response | ConvertTo-Json -Depth 10 | Out-File -FilePath "' + responseFile.fsName.replace(/\\/g, '/') + '" -Encoding utf8\n');
+            psScript.close();
+            
+            // Execute PowerShell script
+            var cmdFile = File(Folder.temp.fsName + "/run_cmd_" + timestamp + ".bat");
+            cmdFile.open("w");
+            cmdFile.write('@echo off\n');
+            cmdFile.write('powershell.exe -ExecutionPolicy Bypass -File "' + psScript.fsName + '"\n');
+            cmdFile.close();
+            
+            cmdFile.execute();
+            
+            // Wait for response
+            var maxWait = 30;
+            var waited = 0;
+            while (!responseFile.exists && waited < maxWait) {
+                $.sleep(500);
+                waited++;
+            }
+            
+            if (responseFile.exists) {
+                $.sleep(500); // Give it a moment to finish writing
+                responseFile.encoding = "UTF-8";
+                responseFile.open("r");
+                var responseText = responseFile.read();
+                responseFile.close();
+                
+                // Clean up temp files
+                try { tempFile.remove(); } catch(e) {}
+                try { psScript.remove(); } catch(e) {}
+                try { cmdFile.remove(); } catch(e) {}
+                try { responseFile.remove(); } catch(e) {}
+                
+                // Parse response
+                var responseData = JSON.parse(responseText);
+                if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
+                    return responseData.candidates[0].content.parts[0].text.trim();
+                } else {
+                    throw new Error("Invalid response format from API");
+                }
+            } else {
+                throw new Error("No response file created. Check if PowerShell and curl are available.");
+            }
+        } else {
+            // Mac/Linux - use curl
+            var curlCmd = 'curl -s -X POST "' + apiUrl + '" -H "Content-Type: application/json" -d "@' + tempFile.fsName + '"';
+            var shell = new File(Folder.temp.fsName + "/run_curl_" + timestamp + ".sh");
+            shell.open("w");
+            shell.write('#!/bin/bash\n');
+            shell.write(curlCmd + ' > "' + responseFile.fsName + '"\n');
+            shell.close();
+            shell.permissions = "rwxr-xr-x";
+            
+            shell.execute();
+            
+            // Wait for response
+            var maxWait = 30;
+            var waited = 0;
+            while (!responseFile.exists && waited < maxWait) {
+                $.sleep(500);
+                waited++;
+            }
+            
+            if (responseFile.exists) {
+                $.sleep(500);
+                responseFile.encoding = "UTF-8";
+                responseFile.open("r");
+                var responseText = responseFile.read();
+                responseFile.close();
+                
+                // Clean up
+                try { tempFile.remove(); } catch(e) {}
+                try { shell.remove(); } catch(e) {}
+                try { responseFile.remove(); } catch(e) {}
+                
+                // Parse response
+                var responseData = JSON.parse(responseText);
+                if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
+                    return responseData.candidates[0].content.parts[0].text.trim();
+                } else {
+                    throw new Error("Invalid response format from API");
+                }
+            } else {
+                throw new Error("No response file created. Check if curl is available.");
+            }
+        }
+        
+    } catch (error) {
+        throw new Error("API call failed: " + error.message);
+    }
+}
+
+
