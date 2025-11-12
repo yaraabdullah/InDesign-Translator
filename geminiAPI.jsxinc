@@ -3,8 +3,88 @@
  * Handles API communication with Google Gemini
  */
 
-// Load API key from config file
+// API Key - Set your Gemini API key here
+var GEMINI_API_KEY = "AIzaSyAEiABJLSgW0Fp8x5-BmAiWobQ27ICPvXY";
+
+// JSON polyfill for ExtendScript (doesn't have native JSON in older versions)
+if (typeof JSON === "undefined") {
+    JSON = {};
+}
+
+// JSON.stringify polyfill
+if (typeof JSON.stringify === "undefined") {
+    JSON.stringify = function(obj) {
+        if (obj === null || obj === undefined) {
+            return "null";
+        }
+        if (typeof obj === "string") {
+            return '"' + obj.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t") + '"';
+        }
+        if (typeof obj === "number" || typeof obj === "boolean") {
+            return String(obj);
+        }
+        if (obj instanceof Array) {
+            var items = [];
+            for (var i = 0; i < obj.length; i++) {
+                items.push(JSON.stringify(obj[i]));
+            }
+            return "[" + items.join(",") + "]";
+        }
+        if (typeof obj === "object") {
+            var pairs = [];
+            for (var key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    pairs.push('"' + key + '":' + JSON.stringify(obj[key]));
+                }
+            }
+            return "{" + pairs.join(",") + "}";
+        }
+        return "null";
+    };
+}
+
+// JSON.parse polyfill (improved version for ExtendScript)
+if (typeof JSON.parse === "undefined") {
+    JSON.parse = function(str) {
+        // Clean the string first
+        str = String(str).replace(/^\s+|\s+$/g, '');
+        
+        // Try using eval with better error handling
+        try {
+            // Remove any BOM or leading whitespace
+            if (str.charAt(0) === '\uFEFF') {
+                str = str.substring(1);
+            }
+            // Use Function constructor as safer alternative to eval
+            return (new Function("return " + str))();
+        } catch (e) {
+            // Fallback to eval if Function constructor fails
+            try {
+                return eval("(" + str + ")");
+            } catch (e2) {
+                throw new Error("JSON parse error: " + e2.message + " - String: " + str.substring(0, 100));
+            }
+        }
+    };
+}
+
+// Custom trim function for ExtendScript (doesn't have native trim)
+function trimString(str) {
+    if (!str || str === null || str === undefined) {
+        return "";
+    }
+    str = String(str);
+    return str.replace(/^\s+|\s+$/g, '');
+}
+
+// Load API key - first try hardcoded key, then config file, then prompt
 function loadAPIKey() {
+    // First, use the hardcoded API key if available
+    if (GEMINI_API_KEY && trimString(GEMINI_API_KEY) !== "") {
+        return trimString(String(GEMINI_API_KEY));
+    }
+    
+    // Try to load from config file
     try {
         // Try multiple possible config locations
         var configPaths = [
@@ -26,13 +106,13 @@ function loadAPIKey() {
                 try {
                     var configData = JSON.parse(configContent);
                     if (configData.apiKey) {
-                        return configData.apiKey;
+                        return trimString(String(configData.apiKey));
                     }
                 } catch (e) {
                     // Fallback to regex parsing
                     var apiKeyMatch = configContent.match(/"apiKey"\s*:\s*"([^"]+)"/);
                     if (apiKeyMatch && apiKeyMatch.length > 1) {
-                        return apiKeyMatch[1];
+                        return trimString(String(apiKeyMatch[1]));
                     }
                 }
             }
@@ -41,13 +121,14 @@ function loadAPIKey() {
         // Continue to prompt
     }
     
-    // Try to get from environment variable or prompt user
+    // Last resort: prompt user
     var apiKey = prompt("Please enter your Gemini API key:", "");
-    if (!apiKey || apiKey.trim() === "") {
-        throw new Error("API key is required. Please set it in the config.json file or enter it when prompted.");
+    var trimmedKey = trimString(String(apiKey));
+    if (!apiKey || trimmedKey === "") {
+        throw new Error("API key is required. Please set GEMINI_API_KEY in the script or config.json file.");
     }
     
-    return apiKey.trim();
+    return trimmedKey;
 }
 
 // Call Gemini API for translation
@@ -65,6 +146,9 @@ function callGeminiAPIWithCurl(text) {
             throw new Error("API key not found");
         }
         
+        // Ensure apiKey is a string
+        apiKey = String(apiKey);
+        
         // Escape text for JSON - handle special characters
         var escapedText = text.replace(/\\/g, "\\\\")
                               .replace(/"/g, '\\"')
@@ -72,7 +156,7 @@ function callGeminiAPIWithCurl(text) {
                               .replace(/\r/g, "\\r")
                               .replace(/\t/g, "\\t");
         
-        var promptText = "Translate the following Arabic text to English. Only return the translation, no explanations:\n\n" + text;
+        var promptText = "Translate the following Arabic text to English. Return ONLY the English translation, nothing else. No explanations, no notes, no additional text. Just the translation:\n\n" + text;
         
         // Build JSON payload properly
         var jsonPayload = {
@@ -97,37 +181,93 @@ function callGeminiAPIWithCurl(text) {
         // Create response file path
         var responseFile = File(Folder.temp.fsName + "/indesign_response_" + timestamp + ".json");
         
-        // Create curl command
-        var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + apiKey;
+        // Create curl command - use gemini-2.5-flash (available model)
+        var apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
         
         if ($.os.indexOf("Windows") !== -1) {
             // Windows - use PowerShell for better JSON handling
+            var errorFile = File(Folder.temp.fsName + "/indesign_error_" + timestamp + ".txt");
             var psScript = File(Folder.temp.fsName + "/run_translate_" + timestamp + ".ps1");
+            
+            // Escape paths for PowerShell (escape backslashes and quotes)
+            var escapePowerShellPath = function(path) {
+                return path.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\$/g, '`$');
+            };
+            var escapedTempPath = escapePowerShellPath(tempFile.fsName);
+            var escapedResponsePath = escapePowerShellPath(responseFile.fsName);
+            var escapedErrorPath = escapePowerShellPath(errorFile.fsName);
+            
             psScript.open("w");
-            psScript.write('$json = Get-Content "' + tempFile.fsName.replace(/\\/g, '/') + '" -Raw\n');
-            psScript.write('$response = Invoke-RestMethod -Uri "' + apiUrl + '" -Method Post -Body $json -ContentType "application/json; charset=utf-8"\n');
-            psScript.write('$response | ConvertTo-Json -Depth 10 | Out-File -FilePath "' + responseFile.fsName.replace(/\\/g, '/') + '" -Encoding utf8\n');
+            psScript.write('$ErrorActionPreference = "Stop"\n');
+            psScript.write('try {\n');
+            psScript.write('    $json = Get-Content -LiteralPath "' + escapedTempPath + '" -Raw -ErrorAction Stop\n');
+            psScript.write('    $response = Invoke-RestMethod -Uri "' + apiUrl + '" -Method Post -Body $json -ContentType "application/json; charset=utf-8" -ErrorAction Stop\n');
+            psScript.write('    $response | ConvertTo-Json -Depth 10 | Out-File -LiteralPath "' + escapedResponsePath + '" -Encoding utf8 -ErrorAction Stop\n');
+            psScript.write('} catch {\n');
+            psScript.write('    $_.Exception.Message | Out-File -LiteralPath "' + escapedErrorPath + '" -Encoding utf8\n');
+            psScript.write('    $_.Exception | Out-File -LiteralPath "' + escapedErrorPath + '" -Append -Encoding utf8\n');
+            psScript.write('    exit 1\n');
+            psScript.write('}\n');
             psScript.close();
             
-            // Execute PowerShell script
-            var cmdFile = File(Folder.temp.fsName + "/run_cmd_" + timestamp + ".bat");
-            cmdFile.open("w");
-            cmdFile.write('@echo off\n');
-            cmdFile.write('powershell.exe -ExecutionPolicy Bypass -File "' + psScript.fsName + '"\n');
-            cmdFile.close();
+            // Execute PowerShell script silently using WScript (no window)
+            var vbsFile = File(Folder.temp.fsName + "/run_translate_" + timestamp + ".vbs");
+            // Escape path for VBScript (double quotes become double double quotes)
+            var vbsPath = psScript.fsName.replace(/"/g, '""');
+            vbsFile.open("w");
+            vbsFile.write('Set WshShell = CreateObject("WScript.Shell")\n');
+            // VBScript: use "" to represent a single " in a string
+            // Use True to wait for PowerShell to complete (window style 0 = hidden)
+            vbsFile.write('WshShell.Run "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File ""' + vbsPath + '""", 0, True\n');
+            vbsFile.write('Set WshShell = Nothing\n');
+            vbsFile.close();
             
-            cmdFile.execute();
+            // Execute VBS script (runs hidden)
+            vbsFile.execute();
             
-            // Wait for response
-            var maxWait = 30;
+            // Wait for response or error file (increased wait time for API calls)
+            var maxWait = 60; // 60 seconds max wait
             var waited = 0;
-            while (!responseFile.exists && waited < maxWait) {
-                $.sleep(500);
+            while (!responseFile.exists && !errorFile.exists && waited < maxWait) {
+                $.sleep(1000); // Check every second
                 waited++;
+                // Also check if VBScript process completed by checking if files are being created
+            }
+            
+            // Give extra time for file to be fully written
+            if (responseFile.exists || errorFile.exists) {
+                $.sleep(2000); // Wait 2 more seconds to ensure file is complete
+            }
+            
+            // Check for errors first
+            if (errorFile.exists) {
+                errorFile.encoding = "UTF-8";
+                errorFile.open("r");
+                var errorText = errorFile.read();
+                errorFile.close();
+                try { errorFile.remove(); } catch(e) {}
+                try { tempFile.remove(); } catch(e) {}
+                try { psScript.remove(); } catch(e) {}
+                try { vbsFile.remove(); } catch(e) {}
+                
+                // Add endpoint info to error (without API key)
+                var endpointInfo = apiUrl.replace(/key=[^&]*/, 'key=***');
+                var errorMsg = "PowerShell error: " + errorText + "\n\nEndpoint tried: " + endpointInfo;
+                errorMsg += "\n\nTroubleshooting 404 errors:";
+                errorMsg += "\n1. Verify your API key is valid at: https://makersuite.google.com/app/apikey";
+                errorMsg += "\n2. Enable the Gemini API in Google Cloud Console:";
+                errorMsg += "\n   - Go to: https://console.cloud.google.com/apis/library";
+                errorMsg += "\n   - Search for 'Generative Language API'";
+                errorMsg += "\n   - Click 'Enable'";
+                errorMsg += "\n3. Ensure billing is enabled (required for API access)";
+                errorMsg += "\n4. Check API quotas and limits";
+                errorMsg += "\n\nIf the issue persists, try manually testing the API key with curl:";
+                errorMsg += "\ncurl -X POST \"" + endpointInfo.replace('key=***', 'key=YOUR_KEY') + "\" -H \"Content-Type: application/json\" -d '{\"contents\":[{\"parts\":[{\"text\":\"test\"}]}]}'";
+                throw new Error(errorMsg);
             }
             
             if (responseFile.exists) {
-                $.sleep(500); // Give it a moment to finish writing
+                $.sleep(1000); // Give it a moment to finish writing
                 responseFile.encoding = "UTF-8";
                 responseFile.open("r");
                 var responseText = responseFile.read();
@@ -136,18 +276,75 @@ function callGeminiAPIWithCurl(text) {
                 // Clean up temp files
                 try { tempFile.remove(); } catch(e) {}
                 try { psScript.remove(); } catch(e) {}
-                try { cmdFile.remove(); } catch(e) {}
-                try { responseFile.remove(); } catch(e) {}
+                try { vbsFile.remove(); } catch(e) {}
+                try { errorFile.remove(); } catch(e) {}
+                
+                // Check if response is empty
+                if (!responseText || trimString(responseText) === "") {
+                    try { responseFile.remove(); } catch(e) {}
+                    throw new Error("Empty response from API. Check your API key and internet connection.");
+                }
                 
                 // Parse response
-                var responseData = JSON.parse(responseText);
-                if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
-                    return responseData.candidates[0].content.parts[0].text.trim();
-                } else {
-                    throw new Error("Invalid response format from API");
+                try {
+                    var responseData = JSON.parse(responseText);
+                    if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
+                        try { responseFile.remove(); } catch(e) {}
+                        return trimString(responseData.candidates[0].content.parts[0].text);
+                    } else if (responseData.error) {
+                        try { responseFile.remove(); } catch(e) {}
+                        throw new Error("API error: " + (responseData.error.message || JSON.stringify(responseData.error)));
+                    } else {
+                        try { responseFile.remove(); } catch(e) {}
+                        throw new Error("Invalid response format from API. Response: " + responseText.substring(0, 200));
+                    }
+                } catch (parseError) {
+                    try { responseFile.remove(); } catch(e) {}
+                    throw new Error("Failed to parse API response: " + parseError.message + ". Response: " + responseText.substring(0, 200));
                 }
             } else {
-                throw new Error("No response file created. Check if PowerShell and curl are available.");
+                // Check if error file exists
+                var errorMsg = "No response file created after " + maxWait + " seconds. ";
+                
+                // Check if PowerShell script file exists (to verify it was created)
+                if (!psScript.exists) {
+                    errorMsg += "PowerShell script file was not created. ";
+                }
+                
+                // Check if VBScript file exists
+                if (!vbsFile.exists) {
+                    errorMsg += "VBScript file was not created. ";
+                }
+                
+                // Check for error file
+                if (errorFile && errorFile.exists) {
+                    try {
+                        errorFile.encoding = "UTF-8";
+                        errorFile.open("r");
+                        var errorText = errorFile.read();
+                        errorFile.close();
+                        errorMsg += "PowerShell Error: " + errorText;
+                        errorFile.remove();
+                    } catch(e) {
+                        errorMsg += "Could not read error file. ";
+                    }
+                } else {
+                    errorMsg += "No error file was created. This might indicate PowerShell did not execute. ";
+                }
+                
+                // Check if temp JSON file exists (to verify it was created)
+                if (tempFile.exists) {
+                    errorMsg += "Temp JSON file exists. ";
+                } else {
+                    errorMsg += "Temp JSON file was not created. ";
+                }
+                
+                errorMsg += "Please verify: 1) PowerShell is installed, 2) API key is valid, 3) Internet connection is working.";
+                
+                try { tempFile.remove(); } catch(e) {}
+                try { psScript.remove(); } catch(e) {}
+                try { vbsFile.remove(); } catch(e) {}
+                throw new Error(errorMsg);
             }
         } else {
             // Mac/Linux - use curl
@@ -176,17 +373,32 @@ function callGeminiAPIWithCurl(text) {
                 var responseText = responseFile.read();
                 responseFile.close();
                 
-                // Clean up
+                // Clean up temp files
                 try { tempFile.remove(); } catch(e) {}
                 try { shell.remove(); } catch(e) {}
-                try { responseFile.remove(); } catch(e) {}
+                
+                // Check if response is empty
+                if (!responseText || trimString(responseText) === "") {
+                    try { responseFile.remove(); } catch(e) {}
+                    throw new Error("Empty response from API. Check your API key and internet connection.");
+                }
                 
                 // Parse response
-                var responseData = JSON.parse(responseText);
-                if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
-                    return responseData.candidates[0].content.parts[0].text.trim();
-                } else {
-                    throw new Error("Invalid response format from API");
+                try {
+                    var responseData = JSON.parse(responseText);
+                    if (responseData.candidates && responseData.candidates.length > 0 && responseData.candidates[0].content && responseData.candidates[0].content.parts && responseData.candidates[0].content.parts.length > 0) {
+                        try { responseFile.remove(); } catch(e) {}
+                        return trimString(responseData.candidates[0].content.parts[0].text);
+                    } else if (responseData.error) {
+                        try { responseFile.remove(); } catch(e) {}
+                        throw new Error("API error: " + (responseData.error.message || JSON.stringify(responseData.error)));
+                    } else {
+                        try { responseFile.remove(); } catch(e) {}
+                        throw new Error("Invalid response format from API. Response: " + responseText.substring(0, 200));
+                    }
+                } catch (parseError) {
+                    try { responseFile.remove(); } catch(e) {}
+                    throw new Error("Failed to parse API response: " + parseError.message + ". Response: " + responseText.substring(0, 200));
                 }
             } else {
                 throw new Error("No response file created. Check if curl is available.");

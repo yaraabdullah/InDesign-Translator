@@ -1,0 +1,30 @@
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# InDesign files
+*.indd
+*.idml
+*.indt
+
+# Backup files
+*~
+*.bak
+*.backup
+
+# Test files
+test_*
+*_test.*
+
+# Config files (API key is hardcoded in script)
+config.json
+
+# Script panel cache
+*.jsxbin
+
