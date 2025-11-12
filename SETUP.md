@@ -39,19 +39,38 @@ Place `config.json` in one of these locations (the script will check in this ord
 
 ### Option A: Scripts Panel (Recommended)
 
-1. **Windows:** Copy both files to:
-   ```
-   C:\Program Files\Adobe\Adobe InDesign [Version]\Scripts\Scripts Panel\
-   ```
+**Important:** To have scripts appear in a separate "User" folder (not nested under "Application"), use the AppData location, NOT the Program Files location.
 
-2. **Mac:** Copy both files to:
+1. **Windows:** Copy both files to the **User** folder in your AppData directory:
    ```
-   /Applications/Adobe InDesign [Version]/Scripts/Scripts Panel/
+   C:\Users\[YourUsername]\AppData\Roaming\Adobe\InDesign\[Version]\Scripts\Scripts Panel\User\
    ```
+   
+   **To find this folder:**
+   - Press `Win + R`, type `%APPDATA%`, press Enter
+   - Navigate to: `Adobe\InDesign\[Version]\Scripts\Scripts Panel\User\`
+   - Create the "User" folder if it doesn't exist
+   - Copy both script files here
+   
+   ⚠️ **Do NOT use:** `C:\Program Files\Adobe\...` (this puts scripts under "Application" folder)
+
+2. **Mac:** Copy both files to the **User** folder in your Preferences directory:
+   ```
+   ~/Library/Preferences/Adobe InDesign/[Version]/Scripts/Scripts Panel/User/
+   ```
+   
+   **To find this folder:**
+   - Open Finder
+   - Press `Cmd + Shift + G` (Go to Folder)
+   - Type: `~/Library/Preferences/Adobe InDesign/[Version]/Scripts/Scripts Panel/User/`
+   - Create the "User" folder if it doesn't exist
+   - Copy both script files here
+   
+   ⚠️ **Do NOT use:** `/Applications/Adobe InDesign...` (this puts scripts under "Application" folder)
 
 3. Restart InDesign
 4. Open Scripts panel: **Window > Utilities > Scripts**
-5. Find `TranslateArabicToEnglish.jsx` under "User" folder
+5. Find `TranslateArabicToEnglish.jsx` under the **"User"** folder (not "Samples")
 6. Double-click to run
 
 ### Option B: Run from File Menu

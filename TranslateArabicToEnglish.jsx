@@ -112,26 +112,26 @@ function translateText(textObj, textFrame, doc) {
         
         // Collect formatting for each character
         for (var i = 0; i < textLength; i++) {
-            var char = textObj.characters[i];
+            var charObj = textObj.characters[i];
             formattingInfo.push({
-                fillColor: char.fillColor.name,
-                strokeColor: char.strokeColor.name,
-                appliedFont: char.appliedFont.name,
-                pointSize: char.pointSize,
-                leading: char.leading,
-                tracking: char.tracking,
-                horizontalScale: char.horizontalScale,
-                verticalScale: char.verticalScale,
-                baselineShift: char.baselineShift,
-                skew: char.skew,
-                underline: char.underline,
-                strikethrough: char.strikethrough,
-                allCaps: char.allCaps,
-                smallCaps: char.smallCaps,
-                superscript: char.superscript,
-                subscript: char.subscript,
-                appliedParagraphStyle: char.appliedParagraphStyle ? char.appliedParagraphStyle.name : null,
-                appliedCharacterStyle: char.appliedCharacterStyle ? char.appliedCharacterStyle.name : null
+                fillColor: charObj.fillColor.name,
+                strokeColor: charObj.strokeColor.name,
+                appliedFont: charObj.appliedFont.name,
+                pointSize: charObj.pointSize,
+                leading: charObj.leading,
+                tracking: charObj.tracking,
+                horizontalScale: charObj.horizontalScale,
+                verticalScale: charObj.verticalScale,
+                baselineShift: charObj.baselineShift,
+                skew: charObj.skew,
+                underline: charObj.underline,
+                strikethrough: charObj.strikethrough,
+                allCaps: charObj.allCaps,
+                smallCaps: charObj.smallCaps,
+                superscript: charObj.superscript,
+                subscript: charObj.subscript,
+                appliedParagraphStyle: charObj.appliedParagraphStyle ? charObj.appliedParagraphStyle.name : null,
+                appliedCharacterStyle: charObj.appliedCharacterStyle ? charObj.appliedCharacterStyle.name : null
             });
         }
 

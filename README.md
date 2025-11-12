@@ -31,9 +31,10 @@ An Adobe InDesign script that translates Arabic text to English using Google's G
      - Same folder as the script files
 
 3. **Install the script in InDesign:**
-   - **Windows:** `C:\Program Files\Adobe\Adobe InDesign [Version]\Scripts\Scripts Panel\`
-   - **Mac:** `/Applications/Adobe InDesign [Version]/Scripts/Scripts Panel/`
+   - **Windows:** Copy both files to `C:\Users\[YourUsername]\AppData\Roaming\Adobe\InDesign\[Version]\Scripts\Scripts Panel\User\`
+   - **Mac:** Copy both files to `~/Library/Preferences/Adobe InDesign/[Version]/Scripts/Scripts Panel/User/`
    - Or place both files in the same folder and run from File > Scripts > User
+   - **Important:** The script should appear under the "User" folder in the Scripts panel, not "Samples"
 
 ## Usage
 
