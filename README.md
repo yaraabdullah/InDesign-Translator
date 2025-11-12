@@ -2,6 +2,12 @@
 
 An Adobe InDesign script that translates Arabic text to English using Google's Gemini API while preserving all text formatting, styles, colors, and paragraph structure.
 
+## 📹 Demo Video
+
+[![Demo Video](Demo.mp4)](Demo.mp4)
+
+*Click the link above to watch the demo video*
+
 ## Features
 
 - ✅ **Cross-platform** - Works on both Windows and Mac
