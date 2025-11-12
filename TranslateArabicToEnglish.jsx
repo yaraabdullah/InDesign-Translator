@@ -579,6 +579,22 @@ function translateText(textObj, textFrame, doc) {
             
             var newParaLength = newPara.characters.length;
             
+            // Set paragraph direction to LTR (Left-to-Right) for English text
+            try {
+                newPara.paragraphDirection = ParagraphDirectionOptions.LEFT_TO_RIGHT_DIRECTION;
+            } catch (e) {
+                // Try alternative property names for different InDesign versions
+                try {
+                    newPara.direction = ParagraphDirectionOptions.LEFT_TO_RIGHT_DIRECTION;
+                } catch (e2) {
+                    try {
+                        newPara.justification = Justification.LEFT_ALIGN;
+                    } catch (e3) {
+                        // Continue if direction setting fails
+                    }
+                }
+            }
+            
             // Get the paragraph formatting from paragraphInfo (stored earlier)
             // This has the first character's formatting for this specific paragraph
             var paraFormat = null;
@@ -796,6 +812,18 @@ function translateText(textObj, textFrame, doc) {
                 }
                 
                 var finalParaLength = finalPara.characters.length;
+                
+                // Ensure paragraph direction is LTR (Left-to-Right) for English text
+                try {
+                    finalPara.paragraphDirection = ParagraphDirectionOptions.LEFT_TO_RIGHT_DIRECTION;
+                } catch (e) {
+                    // Try alternative property names for different InDesign versions
+                    try {
+                        finalPara.direction = ParagraphDirectionOptions.LEFT_TO_RIGHT_DIRECTION;
+                    } catch (e2) {
+                        // Continue if direction setting fails
+                    }
+                }
                 
                 // Get the paragraph formatting from paragraphInfo (stored earlier)
                 var finalParaFormat = null;
