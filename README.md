@@ -4,7 +4,7 @@ An Adobe InDesign script that translates Arabic text to English using Google's G
 
 ## 📹 Demo Video
 
-Demo.mp4
+https://github.com/yaraabdullah/InDesign-Translator/Demo.mp4
 
 *Click the link above to watch the demo video*
 
