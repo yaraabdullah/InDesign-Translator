@@ -31,7 +31,7 @@ function main() {
             
             if (item.constructor.name === "TextFrame") {
                 // Selected text frame - translate all text in the frame
-                if (item.texts.length > 0 && item.texts[0].contents.trim() !== "") {
+                if (item.texts.length > 0 && item.texts[0].contents && String(item.texts[0].contents).trim() !== "") {
                     textItems.push({
                         text: item.texts[0],
                         parent: item
@@ -40,7 +40,7 @@ function main() {
             } else if (item.constructor.name === "Text" || item.constructor.name === "TextStyleRange") {
                 // Selected text range
                 var parentFrame = item.parentTextFrames[0];
-                if (parentFrame && item.contents.trim() !== "") {
+                if (parentFrame && item.contents && String(item.contents).trim() !== "") {
                     textItems.push({
                         text: item,
                         parent: parentFrame
@@ -55,7 +55,7 @@ function main() {
                     var endIdx = item.endOffset;
                     if (endIdx > startIdx) {
                         var textRange = item.parent.characters.itemByRange(startIdx, endIdx - 1);
-                        if (textRange && textRange.contents.trim() !== "") {
+                        if (textRange && textRange.contents && String(textRange.contents).trim() !== "") {
                             textItems.push({
                                 text: textRange,
                                 parent: parentFrame
@@ -68,7 +68,7 @@ function main() {
                 var parentFrame = item.parentTextFrames[0];
                 if (parentFrame) {
                     var para = item.paragraphs[0];
-                    if (para && para.contents.trim() !== "") {
+                    if (para && para.contents && String(para.contents).trim() !== "") {
                         textItems.push({
                             text: para,
                             parent: parentFrame
@@ -102,9 +102,13 @@ function translateText(textObj, textFrame, doc) {
         // Get the original text content
         var originalText = textObj.contents;
         
-        if (!originalText || originalText.trim() === "") {
+        // Convert to string and check if it's not empty
+        if (!originalText || String(originalText).trim() === "") {
             return;
         }
+        
+        // Ensure originalText is a string
+        originalText = String(originalText);
 
         // Store formatting information
         var formattingInfo = [];
