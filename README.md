@@ -132,10 +132,6 @@ The script uses Google's Gemini 2.5 Flash model for translation. The API key is 
 
 To change the API key, edit `geminiAPI.jsxinc` and update the `GEMINI_API_KEY` variable.
 
-## License
-
-This script is provided as-is for personal and commercial use.
-
 ## Support
 
 For issues or questions:
@@ -143,7 +139,3 @@ For issues or questions:
 2. Verify your internet connection
 3. Check InDesign's error console for detailed error messages
 4. Make sure both script files are in the same folder
-
-## Contributing
-
-Feel free to submit issues or pull requests to improve this script!
